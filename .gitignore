@@ -1,3 +1,8 @@
 .makefun/*
 !.makefun/owner.json
 analysis/tmp/
+analysis/
+outA/
+outB/
+__pycache__/
+*.pyc

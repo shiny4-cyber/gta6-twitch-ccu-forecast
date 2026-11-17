@@ -29,9 +29,10 @@ The forecast anchors on the case's hour-1 print p1 and adds, per hour o,
 
     ln q(o) = ln p1 + [D(o) - D(0)] + [R(k_o) - R(k_1)] + B1(o) (ln p1 - mean) + B2(o) (S_1 - mean)
 
-with k_o = o - u_case. Quantiles are not normal: the residual of each comparable around that same
-formula is standardised by that hour's conditional scale and the five levels are read as weighted
-empirical quantiles of the pooled standardised residuals, so skew and fat tails come from the data.
+with k_o = o - u_case. Quantiles are not normal and not one shape for the whole day: each comparable's
+residual is inflated by its own hat value (the exact leave-one-out factor) to stand for a launch the fit
+never saw, and each hour reads its five levels off the weighted empirical quantiles of those
+out-of-sample residuals, pooled over a three-hour window so a thin pool cannot make jagged tails.
 Intervals widen with the hour's residual scale, the fit's standard error at the case's covariates, and
 shrink toward the persistence baseline (0.15 * sqrt(h-1) in log space, normal) when the weighted
 evidence is thin or the case's first hour is an outlier against the pool.
@@ -58,20 +59,21 @@ ZN = [-1.6448536269514722, -0.6744897501960817, 0.0, 0.6744897501960817, 1.64485
 BASELINE_SIGMA = 0.15
 
 # --- model constants (chosen on the 38-comparable pool, never on the four practice answers) --------
-SIG_SCALE = 1.5        # kernel width on ln(v1) similarity, log units
+SIG_SCALE = 2.2        # kernel width on ln(v1) similarity, log units
 SIG_UNLOCK = 8.0       # kernel width on |u_c - u_case|, hours (soft: the phase term carries it)
 W_PLATFORM_PC_MISMATCH = 0.6   # a PC/console mismatch multiplies the weight
 W_WEEKDAY_OTHER = 0.9  # release on another weekday
-BETA_CAP = 0.5         # cap on |covariate slope| per offset, log units per unit covariate
+BETA_CAP = 0.3         # cap on |covariate slope| per offset, log units per unit covariate
 GROUP_CAP = 0.4        # cap on the console-only group offset per offset, log units
 GROUP_SHRINK = 6.0     # the offset is shrunk by ess / (ess + GROUP_SHRINK)
-ESS_K = 8.0            # shrinkage: lambda = ess / (ess + ESS_K)
-INFLATE = 0.6          # weight of the fitted-mean standard error in the predictive scale
-WIDTH = 1.0            # multiplier on the pooled residual scale
-WINSOR = 2.0           # clip on standardised residuals before reading the empirical shape (0 = off)
+ESS_K = 14.0           # shrinkage: lambda = ess / (ess + ESS_K)
+INFLATE = 0.3          # weight of the fitted-mean standard error in the predictive scale
+WIDTH = 0.55           # multiplier on the conformal residual scale
 ROBUST_SCALE = True    # use the weighted MAD instead of the weighted sd for the conditional scale
+HAT_CAP = 0.8          # cap on the leave-one-out hat value (a weight share that large is degenerate)
 BASE_LO, BASE_HI = -120, -30   # quiet pre-launch window (hours from day_start)
 MIN_BASE_POINTS = 12
+
 RAMP_STEP = 2          # hours per ramp bin
 RAMP_LO, RAMP_HI = -14, 44
 
@@ -294,6 +296,7 @@ def prepare_pool(case, exclude):
             comp["Sc"] = {o: comp["S"][o] - centre for o in range(24)}
             comp["x1"] = math.log(comp["v1"])
             comp["x2"] = comp["S1"]
+
     return pool, profile
 
 
@@ -389,6 +392,7 @@ def forecast_case(case):
     level_case = case_quiet_level(case, profile)
     s1_case = None if level_case is None else math.log(p1) - level_case - profile[0]
 
+
     # case covariates, clipped into the range the pool actually spans
     x1_case = math.log(p1)
     lo1 = min(c["x1"] for c, _ in scored)
@@ -452,61 +456,87 @@ def forecast_case(case):
         trend = smooth_b1[o] * (x1_case - mean_x1) + smooth_b2[o] * (x2_case - mean_x2)
         median_shift[o] = phase + trend + console_only * group_delta[o]
 
-    # conditional scale per offset, and the pooled shape of the standardised residuals
-    scales, standardised = {}, []
+    # --- conformal quantiles -------------------------------------------------------------------
+    # A residual from a comparable that was in the fit is optimistic: the fit leans on it. The
+    # weighted-least-squares hat diagonal h_i is the exact leave-one-out inflation for the weighted
+    # mean and the regression's own leverage, so r / (1 - h_i) estimates the error on a launch the
+    # fit never saw. Each hour's five levels are then read as weighted empirical quantiles of those
+    # out-of-sample residuals, standardised by the hour's robust scale and pooled over a three-hour
+    # window so a thin pool cannot produce jagged tails; the window's quantiles are put back on the
+    # hour's own scale. Pooling one sample per window keeps the five levels ordered.
+    scored_weights = [w for _, w in scored]
+    total_weight = sum(scored_weights)
+    ess = (total_weight ** 2) / sum(w * w for w in scored_weights) if total_weight > 0 else 0.0
+    s11 = sum(w * (c["x1"] - mean_x1) ** 2 for c, w in scored)
+    s22 = sum(w * (c["x2"] - mean_x2) ** 2 for c, w in scored)
+    s12 = sum(w * (c["x1"] - mean_x1) * (c["x2"] - mean_x2) for c, w in scored)
+    det = s11 * s22 - s12 * s12
+    if abs(det) > 1e-12:
+        inv = (s22 / det, s12 / det, s11 / det)
+    else:
+        inv = (0.0, 0.0, 1.0 / max(s22, 1e-9))
+
+    raw = {o: [] for o in range(1, 24)}
     for o in range(1, 24):
-        residuals = []
         for comp, weight in zip(pool, weights):
             if comp["S"] is None:
                 continue
             phase = ramp_at(ramp, o - comp["u"]) - ramp_at(ramp, -comp["u"])
             trend = smooth_b1[o] * (comp["x1"] - mean_x1) + smooth_b2[o] * (comp["x2"] - mean_x2)
             group = 0.0 if comp["platforms"]["pc"] else 1.0
-            residuals.append((comp["L"][o] - phase - trend - group * group_delta[o], weight))
-        scale = weighted_std([r for r, _ in residuals], [w for _, w in residuals])
+            z1 = comp["x1"] - mean_x1
+            z2 = comp["x2"] - mean_x2
+            hat = weight * (1.0 / max(total_weight, 1e-9)
+                            + inv[0] * z1 * z1 + 2.0 * inv[1] * z1 * z2 + inv[2] * z2 * z2)
+            raw[o].append((comp["L"][o] - phase - trend - group * group_delta[o],
+                           weight, min(max(hat, 0.0), HAT_CAP)))
+    loo_residuals = {o: [] for o in range(1, 24)}
+    for o in range(1, 24):
+        for value, weight, hat in raw[o]:
+            loo_residuals[o].append((value / (1.0 - hat), weight))
+
+    scales = {}
+    for o in range(1, 24):
+        values = [r for r, _ in loo_residuals[o]]
+        ww = [w for _, w in loo_residuals[o]]
+        scale = weighted_std(values, ww)
         if ROBUST_SCALE:
-            scale = min(scale, 1.4826 * weighted_mad([r for r, _ in residuals], [w for _, w in residuals]))
+            scale = min(scale, 1.4826 * weighted_mad(values, ww))
         scales[o] = max(scale, 1e-6)
-        for r, w in residuals:
-            z = r / scales[o]
-            if WINSOR:
-                z = max(-WINSOR, min(WINSOR, z))
-            standardised.append((z, w))
-    shape = [weighted_quantile(standardised, tau) for tau in LEVELS]
 
-    scored_weights = [w for _, w in scored]
-    total_weight = sum(scored_weights)
-    ess = (total_weight ** 2) / sum(w * w for w in scored_weights) if total_weight > 0 else 0.0
-    lam = ess / (ess + ESS_K) if ess > 0 else 0.0
-    lam /= (1.0 + outlier)
+    conformal = {}
+    for o in range(1, 24):
+        window = [g for g in (o - 1, o, o + 1) if 1 <= g <= 23]
+        sample = [(r / scales[g], w) for g in window for r, w in loo_residuals[g]]
+        quantiles = [weighted_quantile(sample, tau) for tau in LEVELS]
+        for i in range(1, 5):
+            quantiles[i] = max(quantiles[i], quantiles[i - 1])
+        conformal[o] = [q * scales[o] for q in quantiles]
+
+    # the case's own distance from the pool (and thin evidence) widen the band, never the median
     sxx = sum(w * (c["x2"] - mean_x2) ** 2 for c, w in scored)
-
-    # weighted covariance of the two covariates, for the regression's own uncertainty at the case
-    s11 = sum(w * (c["x1"] - mean_x1) ** 2 for c, w in scored)
-    s22 = sum(w * (c["x2"] - mean_x2) ** 2 for c, w in scored)
-    s12 = sum(w * (c["x1"] - mean_x1) * (c["x2"] - mean_x2) for c, w in scored)
-    det = s11 * s22 - s12 * s12
     dx1 = x1_case - mean_x1
     dx2 = x2_case - mean_x2
     if abs(det) > 1e-12:
-        leverage = (s22 * dx1 * dx1 - 2.0 * s12 * dx1 * dx2 + s11 * dx2 * dx2) / det
+        leverage = (inv[2] * dx1 * dx1 - 2.0 * inv[1] * dx1 * dx2 + inv[0] * dx2 * dx2)
     else:
-        leverage = (dx2 * dx2) / max(sxx, 1e-9)
+        leverage = dx2 * dx2 / max(sxx, 1e-9)
     leverage = max(0.0, leverage)
+    lam = ess / (ess + ESS_K) if ess > 0 else 0.0
+    lam /= (1.0 + outlier)
 
     rows = {}
     for o in range(1, 24):
         scale = scales[o]
         standard_error = scale * math.sqrt(1.0 / max(ess, 1e-6) + leverage)
-        inflate = math.sqrt(1.0 + (INFLATE * standard_error / scale) ** 2)
+        widen = math.sqrt(1.0 + (INFLATE * standard_error / scale) ** 2)
         base_shift = median_shift[o]
+        spread = [value * WIDTH * widen for value in conformal[o]]
         quantiles = []
-        for i, tau in enumerate(LEVELS):
-            empirical = shape[i] * scale * WIDTH * inflate
+        for i in range(5):
             normal = ZN[i] * BASELINE_SIGMA * math.sqrt(o)  # persistence baseline, o = h - 1
-            shift = lam * empirical + (1.0 - lam) * normal
-            value = math.exp(math.log(p1) + (profile[o % 24] - profile[0]) + base_shift + shift)
-            quantiles.append(value)
+            shift = lam * spread[i] + (1.0 - lam) * normal
+            quantiles.append(math.exp(math.log(p1) + (profile[o % 24] - profile[0]) + base_shift + shift))
         rows[o + 1] = quantiles
     return tidy(rows)
 

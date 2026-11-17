@@ -30,13 +30,14 @@ Mean pinball loss over hours 2..24 and the five levels; lower is better.
 
 | case | launch | house baseline | this entry | gain |
 |------|--------|---------------:|-----------:|-----:|
-| p00 | Marvel's Wolverine | 0.7436 | 0.2150 | 3.46x |
-| p01 | Red Dead Redemption 2 | 0.2868 | 0.1643 | 1.75x |
-| p02 | God of War Ragnarök | 0.2146 | 0.1340 | 1.60x |
-| p03 | Marvel's Spider-Man 2 | 0.3033 | 0.1863 | 1.63x |
-| mean | | 0.387077 | 0.174906 | 2.21x |
+| p00 | Marvel's Wolverine | 0.7436 | 0.2229 | 3.34x |
+| p01 | Red Dead Redemption 2 | 0.2868 | 0.1285 | 2.23x |
+| p02 | God of War Ragnarök | 0.2146 | 0.1205 | 1.78x |
+| p03 | Marvel's Spider-Man 2 | 0.3033 | 0.1879 | 1.61x |
+| mean | | 0.387077 | 0.164962 | 2.35x |
 
-90% coverage 0.946 (baseline 0.783), typical miss 29.5% (baseline 82.7%). The kit ships no local grader,
+90% coverage 0.946 (baseline 0.783), typical miss 26.1% (baseline 82.7%). Leave-one-comparable-out over
+the 17 launch-grade pooled comparables: 0.2443 against the baseline's 0.3472, coverage 0.908. The kit ships no local grader,
 so `tools/grade_local.py` implements the arithmetic of RULES.txt "Scoring" and is validated against the
 RULES worked example (0.112545) and against the published baseline (0.387077 / 82.7% / 0.783).
 
@@ -47,6 +48,7 @@ RULES worked example (0.112545) and against the published baseline (0.387077 / 8
     tools/grade_local.py        the documented pinball loss, coverage and typical miss
     tools/validate.py           strict format guard for an output file
     tools/diagnose.py           practice scores, determinism, runtime, leave-one-comparable-out
+    tools/loo.py                leave-one-comparable-out by hour band and by quantile level
     tools/practice_answers.json hours 1..24 of the four practice launches (SullyGnome averages)
 
     python3 tools/diagnose.py --kit <unpacked kit>       full report

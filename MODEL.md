@@ -49,26 +49,29 @@ the range the pool actually spans (no extrapolating a 4x-bigger launch past the 
 
 ## Quantiles
 
-No normal assumption. For every comparable and every hour, the residual around the formula above is
-divided by that hour's conditional scale (weighted MAD, capped by the weighted sd, winsorised at ±2), and
-the five levels are read as weighted empirical quantiles of the pooled standardised residuals. The
-practice pool's shape is roughly (-1.35, -0.55, 0.0, 0.5, 1.8): skewed, with a longer right tail, which
-is how launches actually surprise.
+No normal assumption, and no shared shape across hours. Each comparable's residual around the formula
+above is turned into an out-of-sample residual before anything is read off it: a comparable that was in
+the fit is one the fit leaned on, and the weighted-least-squares hat diagonal
 
-Three widenings apply:
+    h_i = w_i * (1 / sum(w) + z_i' (Z'WZ)^-1 z_i),      z = (x1, x2) centred
 
-* the hour's conditional scale (comparables disagree more at some hours than others);
-* the fitted mean's own standard error at the case's covariates, `sqrt(1/ess + leverage)`, leverage being
-  the quadratic form of the 2x2 weighted covariance of (x1, x2) — this is what keeps a case sitting at
-  the pool's edge honest;
-* the weighted evidence `ess = (sum w)^2 / sum w^2`: `lambda = ess / (ess + 8)` blends the empirical
-  quantiles with the persistence baseline's normal spread `0.15 * sqrt(h - 1)`, and `lambda` is divided
-  by `1 + outlier`, where `outlier` measures how far the case's hour 1 sits from the pool's elevation.
+is the exact leave-one-out inflation for the weighted mean plus the regression's own leverage, so
+`r_i / (1 - h_i)` estimates the error the same formula would make on a launch it never saw. Each hour's
+five levels are then the weighted empirical quantiles of those residuals, standardised by the hour's
+robust scale (weighted MAD, capped by the weighted sd) and pooled over a three-hour window, so a thin
+pool cannot make jagged tails; the window's quantiles are put back on the hour's own scale. Pooling one
+sample per window keeps the five levels ordered, and the 0.5 level is a real per-hour bias correction,
+not zero by construction: it is what pulled the median reliability from 0.34 to 0.45 (target 0.50).
 
-Comparable weights (all multiplicative, on top of a tier weight from the note: 1.0 comparable, 0.8
+Three widenings remain: the case's own distance from the pool (`sqrt(1/ess + leverage)` from the same
+2x2 covariance, which is what keeps a case sitting at the pool's edge honest), a width multiplier, and
+`lambda = ess / (ess + 14)` divided by `1 + outlier` blending toward the persistence baseline's normal
+spread `0.15 * sqrt(h - 1)` when the weighted evidence is thin or hour 1 is an outlier.
+
+Comparable weights (multiplicative, on top of a tier weight from the note: 1.0 comparable, 0.8
 unverified, 0.5 weak, 0.25 early-access-contaminated):
 
-    exp(-0.5 ((ln v1 - ln p1)/1.5)^2)          size similarity
+    exp(-0.5 ((ln v1 - ln p1)/2.2)^2)          size similarity
     exp(-0.5 ((u_c - u_case)/8)^2)             unlock proximity (soft: the phase term does the work)
     platform overlap, PC mismatch x0.6          same audience
     weekday mismatch x0.9                       release day's position in the week
@@ -79,33 +82,44 @@ Practice, mean pinball loss over 23 hours x 5 levels (lower is better):
 
 | case | launch | baseline | this entry | gain | 90% coverage | typical miss |
 |------|--------|---------:|-----------:|-----:|-------------:|-------------:|
-| p00 | Marvel's Wolverine | 0.7436 | 0.2150 | 3.46x | 0.96 | 41% |
-| p01 | Red Dead Redemption 2 | 0.2868 | 0.1643 | 1.75x | 1.00 | 30% |
-| p02 | God of War Ragnarök | 0.2146 | 0.1340 | 1.60x | 1.00 | 19% |
-| p03 | Marvel's Spider-Man 2 | 0.3033 | 0.1863 | 1.63x | 0.83 | 30% |
-| **mean** | | **0.387077** | **0.174906** | **2.21x** | 0.946 | 29.5% |
+| p00 | Marvel's Wolverine | 0.7436 | 0.2229 | 3.34x | 0.96 | 42% |
+| p01 | Red Dead Redemption 2 | 0.2868 | 0.1285 | 2.23x | 1.00 | 18% |
+| p02 | God of War Ragnarök | 0.2146 | 0.1205 | 1.78x | 1.00 | 16% |
+| p03 | Marvel's Spider-Man 2 | 0.3033 | 0.1879 | 1.61x | 0.83 | 31% |
+| **mean** | | **0.387077** | **0.164962** | **2.35x** | 0.946 | 26.1% |
 
-The baseline's published figures are 0.387, typical miss 82.8%, coverage 0.783; scoring the starter
-through `tools/grade_local.py` reproduces them (0.387077 / 82.7% / 0.783), and the RULES worked example
-scores 0.112545 as printed.
+Leave-one-comparable-out is the metric every change below is judged on: each of the 17 pooled launches
+with `v1 >= 15000` and a comparable-or-better note is scored with its own curve removed from its own
+pool. `tools/loo.py` reports it by hour band and by level, so a change has to move the hours that cost.
 
-Leave-one-comparable-out (each of the 17 pooled launches with `v1 >= 15000` and a comparable-or-better
-note is treated as the case, with its own curve removed from its pool): mean loss **0.2636** against the
-baseline's **0.3472** (1.32x), coverage 0.89, baseline ahead on 3 of 17. That check is the honest one:
-the practice cases are scored by a pool that never contained them, and this one also removes each case's
-own curve from its neighbours.
+| change | LOO loss | vs before | bands 2-4 / 5-8 / 9-14 / 15-19 / 20-24 |
+|--------|---------:|----------:|------------------------------------------|
+| before this session (shape x scale quantiles) | 0.2636 | — | 0.1560 / 0.2336 / 0.2961 / 0.3066 / 0.2702 |
+| conformal per-hour, per-level quantiles | 0.2586 | −1.90% | 0.1519 / 0.2311 / 0.2933 / 0.3021 / 0.2594 |
+| + covariate slope cap 0.5 -> 0.3 | 0.2525 | −2.36% | 0.1526 / 0.2304 / 0.2829 / 0.2959 / 0.2502 |
+| + size-kernel width 1.5 -> 2.2 | 0.2495 | −1.19% | 0.1550 / 0.2319 / 0.2729 / 0.2886 / 0.2529 |
+| + width 0.8 -> 0.55, ESS_K 14 | **0.2443** | **−2.08%** | 0.1586 / 0.2331 / 0.2710 / 0.2813 / 0.2359 |
+
+Rejected, both measured (per the rule: revert anything that does not improve LOO by 1%):
+
+| change | LOO loss | verdict |
+|--------|---------:|---------|
+| separate ramp for unlocks within 2 h of the day start, shrunk by weight | 0.2559 (primary) / 0.3357 (wider set incl. sub-15k launches) | reverted: +1.0% on the primary set but −2.9% on the wider one (Cyberpunk 0.289 -> 0.244, Black Myth 1.52 -> 1.77); one or two near-start comparables is not a regime |
+| pre-day elevation (mean of the 36 h before release above the quiet level) as a partial third covariate | 0.2501 at cap 0.10, 0.2522 at cap 0.25 | reverted: +1.8-2.3% worse than 0.2456 at every cap; its raw signal (corr −0.21 with the median residual) is already carried by the hour-1 covariates |
+| `categories_hourly` rescaling | not run | not validatable: the field is null in every practice case, so no LOO fold can measure it |
+
+Per level at the chosen configuration: 0.05 → 0.0190, 0.25 → 0.0583, 0.50 → 0.0765, 0.75 → 0.0671,
+0.95 → 0.0234; coverage 0.908. The 9-14, 15-19 and 20-24 bands carry 69% of the loss before the changes and
+67% after (0.8729 of 1.2625 → 0.7882 of 1.1799 per band-sum), and they took all of the gain: -8.5%,
+-8.3% and -12.7% respectively, while 2-4 got 1.7% worse and 5-8 stayed flat.
 
 Reliability (share of hours with `y <= q_tau`; an honest forecast sits at tau):
 
 | tau | 0.05 | 0.25 | 0.50 | 0.75 | 0.95 |
 |-----|-----:|-----:|-----:|-----:|-----:|
-| this entry, practice | 0.04 | 0.10 | 0.34 | 0.77 | 0.99 |
+| this entry, practice | 0.03 | 0.12 | 0.45 | 0.78 | 0.98 |
 | baseline, practice | 0.08 | 0.23 | 0.29 | 0.50 | 0.86 |
-| this entry, leave-one-out | 0.04 | 0.22 | 0.48 | 0.72 | 0.92 |
-
-The lower quantiles sit low and the upper ones high: the entry is deliberately wider than the four
-practice cases need (they are all covered, and the pooled launches disagree by roughly a factor of two
-by mid-afternoon), which is the trade that keeps the leave-one-out coverage at 0.89 instead of 0.6.
+| this entry, leave-one-out | 0.02 | 0.19 | 0.46 | 0.71 | 0.92 |
 
 ## What it cannot do
 
