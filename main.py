@@ -59,7 +59,8 @@ ZN = [-1.6448536269514722, -0.6744897501960817, 0.0, 0.6744897501960817, 1.64485
 BASELINE_SIGMA = 0.15
 
 # --- model constants (chosen on the 38-comparable pool, never on the four practice answers) --------
-SIG_SCALE = 2.2        # kernel width on ln(v1) similarity, log units
+WEIGHT_MODE = "log"    # size similarity: "log" (distance in ln v1) or "rank" (distance in the pool's rank)
+SIG_SCALE = 2.2        # kernel width on that similarity (log units, or rank positions)
 SIG_UNLOCK = 8.0       # kernel width on |u_c - u_case|, hours (soft: the phase term carries it)
 W_PLATFORM_PC_MISMATCH = 0.6   # a PC/console mismatch multiplies the weight
 W_WEEKDAY_OTHER = 0.9  # release on another weekday
@@ -70,6 +71,9 @@ ESS_K = 14.0           # shrinkage: lambda = ess / (ess + ESS_K)
 INFLATE = 0.3          # weight of the fitted-mean standard error in the predictive scale
 WIDTH = 0.55           # multiplier on the conformal residual scale
 ROBUST_SCALE = True    # use the weighted MAD instead of the weighted sd for the conditional scale
+PEAK_SHIFT = 0.75      # the case's evening peak lands this many hours later than the pool's
+PEAK_FROM = 10         # the shift is tapered in from this offset
+RAMP_SHIFT = True      # also shift the launch surplus, not only the diurnal
 HAT_CAP = 0.8          # cap on the leave-one-out hat value (a weight share that large is degenerate)
 BASE_LO, BASE_HI = -120, -30   # quiet pre-launch window (hours from day_start)
 MIN_BASE_POINTS = 12
@@ -367,6 +371,10 @@ def forecast_case(case):
 
     pool, profile = prepare_pool(case, exclude=())
 
+    # similarity in size: distance in log hour-1 viewers, or distance in rank among the pool
+    sizes = sorted(c["x1"] for c in pool)
+    rank_of = {c["name"]: float(sum(1 for s in sizes if s < c["x1"])) for c in pool}
+    case_rank = float(sum(1 for s in sizes if s < math.log(p1)))
     weights = []
     for comp in pool:
         weight = comp["tier"]
@@ -379,7 +387,10 @@ def forecast_case(case):
             weight *= (1.0 if same else W_PLATFORM_PC_MISMATCH) * (0.6 + 0.4 * (overlap / union if union else 1.0))
         if comp["weekday"] != weekday:
             weight *= W_WEEKDAY_OTHER
-        weight *= math.exp(-0.5 * ((comp["x1"] - math.log(p1)) / SIG_SCALE) ** 2)
+        if WEIGHT_MODE == "rank":
+            weight *= math.exp(-0.5 * ((rank_of[comp["name"]] - case_rank) / SIG_SCALE) ** 2)
+        else:
+            weight *= math.exp(-0.5 * ((comp["x1"] - math.log(p1)) / SIG_SCALE) ** 2)
         weight *= math.exp(-0.5 * ((comp["u"] - u_case) / SIG_UNLOCK) ** 2)
         weights.append(weight)
 
@@ -450,9 +461,20 @@ def forecast_case(case):
     group_delta = {o: sum(group_delta[g] for g in (o - 1, o, o + 1) if 1 <= g <= 23)
                      / len([g for g in (o - 1, o, o + 1) if 1 <= g <= 23]) for o in range(1, 24)}
 
+    def phase_shifted(o):
+        """The ramp increment for the case, with the evening phase shift applied if RAMPSHIFT."""
+        if not RAMP_SHIFT or PEAK_SHIFT == 0.0:
+            return ramp_at(ramp, o - u_case) - ramp_at(ramp, -u_case)
+        taper = 0.0 if o < PEAK_FROM - 2 else min(1.0, (o - (PEAK_FROM - 2)) / 3.0)
+        k = o - PEAK_SHIFT * taper
+        low = int(math.floor(k))
+        frac = k - low
+        value = ramp_at(ramp, low - u_case) * (1.0 - frac) + ramp_at(ramp, low + 1 - u_case) * frac
+        return value - ramp_at(ramp, -u_case)
+
     median_shift = {}
     for o in range(1, 24):
-        phase = ramp_at(ramp, o - u_case) - ramp_at(ramp, -u_case)
+        phase = phase_shifted(o)
         trend = smooth_b1[o] * (x1_case - mean_x1) + smooth_b2[o] * (x2_case - mean_x2)
         median_shift[o] = phase + trend + console_only * group_delta[o]
 
@@ -525,6 +547,16 @@ def forecast_case(case):
     lam = ess / (ess + ESS_K) if ess > 0 else 0.0
     lam /= (1.0 + outlier)
 
+    def profile_at(o):
+        """The diurnal term for the case, with the evening phase shift applied (tapered in)."""
+        if PEAK_SHIFT == 0.0:
+            return profile[o % 24]
+        taper = 0.0 if o < PEAK_FROM - 2 else min(1.0, (o - (PEAK_FROM - 2)) / 3.0)
+        x = o - PEAK_SHIFT * taper
+        low = int(math.floor(x))
+        frac = x - low
+        return profile[low % 24] * (1.0 - frac) + profile[(low + 1) % 24] * frac
+
     rows = {}
     for o in range(1, 24):
         scale = scales[o]
@@ -536,7 +568,7 @@ def forecast_case(case):
         for i in range(5):
             normal = ZN[i] * BASELINE_SIGMA * math.sqrt(o)  # persistence baseline, o = h - 1
             shift = lam * spread[i] + (1.0 - lam) * normal
-            quantiles.append(math.exp(math.log(p1) + (profile[o % 24] - profile[0]) + base_shift + shift))
+            quantiles.append(math.exp(math.log(p1) + (profile_at(o) - profile[0]) + base_shift + shift))
         rows[o + 1] = quantiles
     return tidy(rows)
 

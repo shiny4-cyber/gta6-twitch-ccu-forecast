@@ -113,11 +113,16 @@ def loo_report(cases, min_v1=15000, min_tier=0.8):
         if series[0] < min_v1 or entry.tier_weight(comp["unlock"]) < min_tier:
             continue
         t0 = entry.parse_ts(comp["day_start"])
+        channels = None
+        for point in comp.get("hourly") or ():
+            if point.get("from") == comp.get("day_start"):
+                channels = point.get("channels")
+                break
         pseudo = {
             "schema": base_case["schema"], "id": "loo", "game": base_case["game"],
             "day_start": comp["day_start"], "checkpoint": base_case["checkpoint"],
             "levels": base_case["levels"],
-            "known": [{"hour": 1, "viewers": series[0]}],
+            "known": [{"hour": 1, "viewers": series[0], "channels": channels}],
             "forecast": base_case["forecast"], "history": [],
             "history_hourly": [{"from": iso(t0, o), "viewers": v} for o, v in sorted(series.items()) if o <= 0],
             "streams": None, "categories_hourly": None,

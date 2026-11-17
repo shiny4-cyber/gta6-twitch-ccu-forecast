@@ -39,10 +39,16 @@ def folds(case, min_v1, min_tier):
         if series[0] < min_v1 or entry.tier_weight(comp.get("unlock")) < min_tier:
             continue
         t0 = entry.parse_ts(comp["day_start"])
+        channels = None
+        for point in comp.get("hourly") or ():
+            if point.get("from") == comp.get("day_start"):
+                channels = point.get("channels")
+                break
         pseudo = {
             "schema": case["schema"], "id": "loo", "game": case["game"],
             "day_start": comp["day_start"], "checkpoint": case["checkpoint"],
-            "levels": case["levels"], "known": [{"hour": 1, "viewers": series[0]}],
+            "levels": case["levels"],
+            "known": [{"hour": 1, "viewers": series[0], "channels": channels}],
             "forecast": case["forecast"], "history": [],
             "history_hourly": [{"from": iso(t0, o), "viewers": v} for o, v in sorted(series.items()) if o <= 0],
             "streams": None, "categories_hourly": None,

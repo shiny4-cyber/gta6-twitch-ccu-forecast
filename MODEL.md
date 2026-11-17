@@ -76,6 +76,28 @@ unverified, 0.5 weak, 0.25 early-access-contaminated):
     platform overlap, PC mismatch x0.6          same audience
     weekday mismatch x0.9                       release day's position in the week
 
+## What the late-hour residuals answer to
+
+The 17 pooled launches' late residuals (mean of `ln y - ln median` over hours 15-19 and 20-24) against
+every covariate available at forecast time:
+
+| covariate | corr with 15-19 | corr with 20-24 |
+|-----------|----------------:|----------------:|
+| console-only (no PC SKU) | −0.11 | −0.18 |
+| number of platforms | +0.35 | +0.16 |
+| weekday index | +0.36 | −0.39 |
+| unlock hour | −0.11 | −0.17 |
+| ln(hour-1 viewers) | +0.01 | −0.37 |
+| hour-1 elevation S1 | −0.04 | −0.46 |
+| observed evening peak hour | −0.19 | −0.04 |
+| ln(viewers per channel), release day | −0.36 | −0.26 |
+| *observed* fall from hour 1 to hours 2-6 | +0.38 | +0.75 |
+
+Nothing available at forecast time clears |0.5|, and the two that do (the observed early fall and the
+early-band residual) are outcomes, not inputs: the case carries only hour 1. So the late loss is mostly
+cross-launch dispersion of the evening amplitude, which is what the conformal width has to carry. The one
+*structural* error that is measurable is the peak's timing, not its size, and that is the shift above.
+
 ## Results
 
 Practice, mean pinball loss over 23 hours x 5 levels (lower is better):
@@ -98,7 +120,13 @@ pool. `tools/loo.py` reports it by hour band and by level, so a change has to mo
 | conformal per-hour, per-level quantiles | 0.2586 | −1.90% | 0.1519 / 0.2311 / 0.2933 / 0.3021 / 0.2594 |
 | + covariate slope cap 0.5 -> 0.3 | 0.2525 | −2.36% | 0.1526 / 0.2304 / 0.2829 / 0.2959 / 0.2502 |
 | + size-kernel width 1.5 -> 2.2 | 0.2495 | −1.19% | 0.1550 / 0.2319 / 0.2729 / 0.2886 / 0.2529 |
-| + width 0.8 -> 0.55, ESS_K 14 | **0.2443** | **−2.08%** | 0.1586 / 0.2331 / 0.2710 / 0.2813 / 0.2359 |
+| + width 0.8 -> 0.55, ESS_K 14 | 0.2443 | −2.08% | 0.1586 / 0.2331 / 0.2710 / 0.2813 / 0.2359 |
+| + evening phase shift 0.75 h (diurnal and surplus, tapered in from hour 10) | **0.2415** | **−1.15%** | 0.1586 / 0.2331 / 0.2688 / 0.2745 / 0.2323 |
+
+The phase shift is not a tuned knob: scoring each pooled launch's evening peak (its maximum over hours
+15..24) against the model's shows the model peaks +0.82 h early on average (median +1.0 h), and a shift
+of 0.75 h removes most of it. It touches nothing before hour 8 by construction (the taper), so the two
+settled early bands do not move at all.
 
 Rejected, both measured (per the rule: revert anything that does not improve LOO by 1%):
 
@@ -107,6 +135,9 @@ Rejected, both measured (per the rule: revert anything that does not improve LOO
 | separate ramp for unlocks within 2 h of the day start, shrunk by weight | 0.2559 (primary) / 0.3357 (wider set incl. sub-15k launches) | reverted: +1.0% on the primary set but −2.9% on the wider one (Cyberpunk 0.289 -> 0.244, Black Myth 1.52 -> 1.77); one or two near-start comparables is not a regime |
 | pre-day elevation (mean of the 36 h before release above the quiet level) as a partial third covariate | 0.2501 at cap 0.10, 0.2522 at cap 0.25 | reverted: +1.8-2.3% worse than 0.2456 at every cap; its raw signal (corr −0.21 with the median residual) is already carried by the hour-1 covariates |
 | `categories_hourly` rescaling | not run | not validatable: the field is null in every practice case, so no LOO fold can measure it |
+| hour-1 viewers per live channel as a late-hour covariate (one pooled evening slope, capped 0.15-0.5) | 0.2452-0.2505 | reverted: worse at every cap and window. The apparent −0.70 correlation with the hours 20-24 residual came from reading the channel count of the window's *first* day (14 days before release); against the release day's own channels it is −0.26, and dropping Halo Infinite leaves +0.03 |
+| rank-based size similarity instead of log-distance | 0.2701 at its best width | reverted: worse at every kernel width tried (2-8 rank positions); rank throws away the absolute level, which the covariates need |
+| shift the diurnal only (not the surplus) | 0.2422-0.2423 | superseded: −0.86%, below the 1% bar; shifting both reaches −1.15% |
 
 Per level at the chosen configuration: 0.05 → 0.0190, 0.25 → 0.0583, 0.50 → 0.0765, 0.75 → 0.0671,
 0.95 → 0.0234; coverage 0.908. The 9-14, 15-19 and 20-24 bands carry 69% of the loss before the changes and
