@@ -207,6 +207,50 @@ An earlier, wider feature set (log hour-1, console-only, unlock hour, weekday as
 was abandoned before blending: it fit the 17 launches in-sample to 0.2079 and generalised to 0.4469 on
 leave-one-out, i.e. it memorised the launches. The reduced fit above is the honest version.
 
+## Alignment axis, stream concentration, smoothing and the weekend split
+
+The ramp has been phase-aligned since the first version (`k = o - u_c`, the comparable's own unlock), so
+"the pool is aligned on day start" is only true of the *residual* pool, the per-offset covariate slopes
+and the diurnal. Putting the residual pool on the hours-since-unlock axis too was tested:
+
+| hour | clock loss | clock cov | phase loss | phase cov | delta |
+|-----:|-----------:|----------:|-----------:|----------:|------:|
+| 2 | 0.1270 | 0.76 | 0.1308 | 0.82 | +0.0037 |
+| 5 | 0.1305 | 1.00 | 0.1331 | 1.00 | +0.0027 |
+| 6 | 0.2427 | 0.88 | 0.2410 | 0.88 | −0.0017 |
+| 8 | 0.2698 | 0.82 | 0.2633 | 0.82 | −0.0065 |
+| 9 | 0.2554 | 0.82 | 0.2513 | 0.88 | −0.0041 |
+| 12 | 0.2613 | 0.88 | 0.2597 | 0.94 | −0.0016 |
+| 13 | 0.2853 | 0.82 | 0.2892 | 0.82 | +0.0039 |
+| 15 | 0.3058 | 0.88 | 0.3084 | 0.88 | +0.0026 |
+| 20 | 0.2370 | 0.94 | 0.2351 | 0.94 | −0.0019 |
+| 21 | 0.2328 | 0.94 | 0.2305 | 0.94 | −0.0023 |
+| 24 | 0.2210 | 1.00 | 0.2198 | 1.00 | −0.0012 |
+
+Mean: LOO 0.2401 -> 0.2401 (shrink 8), practice 0.159744 -> 0.158530. The axis matters almost nowhere,
+because 30 of 37 comparables unlock at 04:00-05:00Z: on this pool the two axes differ by a constant.
+
+Stream concentration, measured against the late residual with hour-1 data only (none of it uses the
+outcome):
+
+| hour-1 measure | corr 15-19 | corr 20-24 |
+|----------------|-----------:|-----------:|
+| ln(hour-1 viewers) — the size covariate already in the model | +0.02 | −0.38 |
+| ln(channels) | −0.03 | −0.18 |
+| ln(viewers per channel) | +0.06 | −0.26 |
+| channels per 1,000 viewers | −0.13 | +0.32 |
+| partial corr of ln(viewers per channel), given ln(hour-1 viewers) | +0.06 | −0.17 |
+
+Size beats every concentration measure, and after conditioning on size the best concentration term adds
+0.17. A top-channel share cannot be computed at all: `streams` is null in every pooled comparable (only
+the final case carries it), so it can never be validated on either harness.
+
+Neither the residual-axis change nor any concentration term cleared the two-proxy bar, and two cheap
+tests failed as well: giving weekend days their own diurnal profile (LOO +3.67%, practice +1.74%) and a
+wider conformal smoothing window (radius 2: LOO +0.46%, practice +0.61%). Removing the smoothing
+altogether is the one thing that improved both — LOO 0.2394 (−0.28%), practice 0.158788 (−0.60%) — and it
+still misses the 0.5% bar on leave-one-out, so it was not taken.
+
 ## Results
 
 Practice, mean pinball loss over 23 hours x 5 levels (lower is better):
