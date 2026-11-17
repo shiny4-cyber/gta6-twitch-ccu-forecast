@@ -171,6 +171,42 @@ over-covered at 0.946) and either leaves leave-one-out flat or breaks its covera
 that widens the morning does the reverse. With one width policy, the two harnesses cannot be moved
 together any further than commit 217a460 already moves them.
 
+## Direct quantile fit, and why it is off
+
+Instead of calibrating residuals on top of the shape model, fit the quantiles themselves by pinball loss
+on the pooled launches: `log q_tau(o) = a + b*o/24 + c*(o/24)^2 + d*(anchor - log hour1)`, where `anchor`
+is the model's own median log ratio for that launch and hour, so the fit starts from what already works.
+Fitted by iteratively reweighted least squares, 10 iterations, no seed. On the practice pool (851 rows)
+the coefficients are, per level:
+
+| level | a | b (hour) | c (hour²) | d (anchor) |
+|------:|---:|---:|---:|---:|
+| 0.05 | −0.63 | +0.67 | −1.06 | −0.01 |
+| 0.25 | +1.00 | +1.41 | −1.57 | +0.13 |
+| 0.50 | +2.67 | +1.74 | −1.61 | +0.26 |
+| 0.75 | +5.11 | +2.71 | −2.45 | +0.45 |
+| 0.95 | +7.48 | +3.40 | −3.38 | +0.61 |
+
+Every level puts weight well below 1 on the anchor and leans on the hour polynomial: the fit shrinks
+toward a pool-average smooth shape instead of trusting a good per-case anchor. Blended with the conformal
+forecast in log space, `log q = (1-w) log q_conf + w log q_param`:
+
+| blend w | LOO | vs HEAD | practice | vs HEAD | coverage LOO / practice |
+|--------:|----:|--------:|---------:|--------:|------------------------|
+| 0.00 | 0.2401 | — | 0.159744 | — | 0.890 / 0.946 |
+| 0.05 | 0.2385 | −0.68% | 0.159989 | +0.15% | 0.895 / 0.946 |
+| 0.10 | 0.2371 | −1.25% | 0.160706 | +0.60% | 0.895 / 0.957 |
+| 0.20 | 0.2354 | −1.95% | 0.162779 | +1.90% | 0.898 / 0.957 |
+
+By leave-one-out alone the fit earns its place at w≈0.10-0.20, but it costs the practice cases 0.6-1.9%
+at every weight, so under the two-proxy rule it is **rejected** and `PARAM_W` stays 0.0. Bands at w=0.10
+for the record: 0.1552 / 0.2284 / 0.2653 / 0.2707 / 0.2258 — the gain is spread over hours 5-24 and none
+of it comes from hours 2-4, which is the band the practice cases weigh most.
+
+An earlier, wider feature set (log hour-1, console-only, unlock hour, weekday as case-level regressors)
+was abandoned before blending: it fit the 17 launches in-sample to 0.2079 and generalised to 0.4469 on
+leave-one-out, i.e. it memorised the launches. The reduced fit above is the honest version.
+
 ## Results
 
 Practice, mean pinball loss over 23 hours x 5 levels (lower is better):

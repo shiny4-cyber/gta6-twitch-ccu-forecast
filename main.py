@@ -77,6 +77,8 @@ PEAK_SHIFT = 0.40      # the case's evening peak lands this many hours later tha
 PEAK_FROM = 10         # the shift is tapered in from this offset
 RAMP_SHIFT = True      # also shift the launch surplus, not only the diurnal
 HAT_CAP = 0.8          # cap on the leave-one-out hat value (a weight share that large is degenerate)
+PARAM_W = 0.0          # blend weight on the parametric quantile fit (0 = conformal only)
+PARAM_ITERS = 10       # IRLS iterations of that fit
 BASE_LO, BASE_HI = -120, -30   # quiet pre-launch window (hours from day_start)
 MIN_BASE_POINTS = 12
 
@@ -581,6 +583,46 @@ def forecast_case(case):
             shift = lam * spread[i] + (1.0 - lam) * normal
             quantiles.append(math.exp(math.log(p1) + (profile_at(o) - profile[0]) + base_shift + shift))
         rows[o + 1] = quantiles
+    rows = tidy(rows)
+    if PARAM_W > 0.0:
+        rows = blend_parametric(rows, scored, pool, weights, ramp, smooth_b1, smooth_b2, group_delta,
+                               median_shift, profile, p1, u_case, console_only, x1_case)
+    return rows
+
+
+def blend_parametric(rows, scored, pool, weights, ramp, smooth_b1, smooth_b2, group_delta,
+                     median_shift, profile, p1, u_case, console_only, x1_case):
+    """Fit log q_tau(o) = a + b*o/24 + c*(o/24)^2 + d*(anchor - log hour1) by pinball loss on the pool's
+    own launches, and blend its quantiles with the conformal ones in log space (weight PARAM_W).
+
+    `anchor` is the model's own median log ratio for that launch and hour, so the fit starts from what
+    already works and only learns a smooth correction in the hour and in how far the anchor sits below
+    hour 1. Fitted by iteratively reweighted least squares: deterministic, fixed iterations, no seed.
+    """
+    log_p1 = math.log(p1)
+    mean_x1 = weighted_mean([c["x1"] for c, _ in scored], [w for _, w in scored])
+    features, targets = [], []
+    for comp, weight in zip(pool, weights):
+        if comp["S"] is None:
+            continue
+        for o in range(1, 24):
+            anchor = (ramp_at(ramp, o - comp["u"]) - ramp_at(ramp, -comp["u"])
+                      + smooth_b1[o] * (comp["x1"] - mean_x1)
+                      + (0.0 if comp["platforms"]["pc"] else 1.0) * group_delta[o])
+            features.append([1.0, o / 24.0, (o / 24.0) ** 2, anchor - comp["x1"]])
+            targets.append(comp["L"][o])
+    if len(targets) < 40:
+        return rows
+    betas = [quantile_fit(features, targets, tau, PARAM_ITERS) for tau in LEVELS]
+    for o in range(1, 24):
+        log_base = log_p1 + (profile[o % 24] - profile[0])
+        case_feat = [1.0, o / 24.0, (o / 24.0) ** 2, median_shift[o] - log_p1]
+        fitted = [sum(b * f for b, f in zip(betas[i], case_feat)) for i in range(5)]
+        values = [math.exp((1.0 - PARAM_W) * math.log(rows[o + 1][i]) + PARAM_W * (log_base + fitted[i]))
+                  for i in range(5)]
+        for i in range(1, 5):
+            values[i] = max(values[i], values[i - 1])
+        rows[o + 1] = values
     return tidy(rows)
 
 
@@ -610,6 +652,61 @@ def case_quiet_level(case, profile):
     if len(values) < MIN_BASE_POINTS:
         return None
     return sum(values) / len(values)
+
+
+def solve_linear(matrix, rhs):
+    """Small dense linear solve with partial pivoting (deterministic)."""
+    n = len(rhs)
+    rows = [list(matrix[i]) + [rhs[i]] for i in range(n)]
+    for i in range(n):
+        pivot = max(range(i, n), key=lambda r: abs(rows[r][i]))
+        if abs(rows[pivot][i]) < 1e-12:
+            continue
+        rows[i], rows[pivot] = rows[pivot], rows[i]
+        inv = 1.0 / rows[i][i]
+        for r in range(i + 1, n):
+            factor = rows[r][i] * inv
+            if factor:
+                for k in range(i, n + 1):
+                    rows[r][k] -= factor * rows[i][k]
+    out = [0.0] * n
+    for i in range(n - 1, -1, -1):
+        acc = rows[i][n] - sum(rows[i][k] * out[k] for k in range(i + 1, n))
+        out[i] = acc / rows[i][i] if abs(rows[i][i]) > 1e-12 else 0.0
+    return out
+
+
+def quantile_fit(features, targets, tau, iters, ridge=1e-4):
+    """Pinball-loss fit of a linear quantile model by iteratively reweighted least squares."""
+    k = len(features[0])
+    n = len(targets)
+    beta = [0.0] * k
+    for _ in range(iters):
+        ata = [[0.0] * k for _ in range(k)]
+        atb = [0.0] * k
+        for i in range(n):
+            row = features[i]
+            r = targets[i] - sum(beta[j] * row[j] for j in range(k))
+            w = tau / r if r > 0 else (1.0 - tau) / (-r)
+            if w > 1e4:
+                w = 1e4
+            elif w < 1e-4:
+                w = 1e-4
+            for a in range(k):
+                ra = row[a] * w
+                atb[a] += ra * targets[i]
+                for b in range(a, k):
+                    ata[a][b] += ra * row[b]
+        for a in range(k):
+            for b in range(a):
+                ata[a][b] = ata[b][a]
+            ata[a][a] += ridge
+        new = solve_linear(ata, atb)
+        if max(abs(new[j] - beta[j]) for j in range(k)) < 1e-6:
+            beta = new
+            break
+        beta = new
+    return beta
 
 
 def weighted_mad(values, weights):
