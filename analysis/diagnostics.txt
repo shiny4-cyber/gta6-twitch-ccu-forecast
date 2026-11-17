@@ -1,30 +1,30 @@
 worked example (RULES)          loss 0.112545  (expected 0.112545)
 two runs byte identical         True
-slowest single-case run         0.90 s  (limit 8 s per case; all four: 0.74 0.90 0.82 0.57)
+slowest single-case run         0.88 s  (limit 8 s per case; all four: 0.60 0.88 0.50 0.63)
 format problems                 0
-output sizes                    {'p00': 1461, 'p01': 1542, 'p02': 1564, 'p03': 1515}
+output sizes                    {'p00': 1466, 'p01': 1527, 'p02': 1556, 'p03': 1523}
 
 case   baseline   model    gain   cover90  miss%   typical
 ----   --------   -----    ----   -------  -----   -------
-p00      0.7436   0.2235   3.33x     0.96     43      5.7%
-p01      0.2868   0.1395   2.06x     1.00     22     10.0%
-p02      0.2146   0.1219   1.76x     1.00     16     10.0%
-p03      0.3033   0.1805   1.68x     0.83     26     -7.4%
+p00      0.7436   0.2189   3.40x     0.96     42      5.7%
+p01      0.2868   0.1269   2.26x     1.00     20     10.0%
+p02      0.2146   0.1140   1.88x     1.00     14     10.0%
+p03      0.3033   0.1792   1.69x     0.83     28     -7.4%
 
-mean over the four practice cases: baseline 0.387077   model 0.166328   gain 2.33x
-model coverage90 0.946  typical miss 26.3%   (baseline 0.783 / 82.7%)
+mean over the four practice cases: baseline 0.387077   model 0.159744   gain 2.42x
+model coverage90 0.946  typical miss 25.6%   (baseline 0.783 / 82.7%)
 
 reliability (share of hours with y <= q_tau; an honest forecast sits at tau)
    tau       0.05   0.25   0.50   0.75   0.95
-   model      0.03   0.12   0.42   0.75   0.98
+   model      0.03   0.13   0.45   0.75   0.98
    baseline   0.08   0.23   0.29   0.50   0.86
 
 leave-one-comparable-out (17 comparable launches, each scored with its own curve removed from its pool)
-   mean loss 0.2415   baseline 0.3472   gain 1.44x   coverage90 0.91
-   reliability        0.05   0.25   0.50   0.68   0.96
+   mean loss 0.2401   baseline 0.3472   gain 1.45x   coverage90 0.89
+   reliability        0.06   0.27   0.52   0.67   0.95
    cases where the baseline wins: 3 of 17 ['Call of Duty: Modern Warfare III', 'Call of Duty: Modern Warfare 4', 'Borderlands 4']
-   worst: Resident Evil Requiem              0.628 (baseline 1.273, coverage 0.83)
-   worst: Halo Infinite                      0.476 (baseline 0.631, coverage 0.78)
-   worst: Borderlands 4                      0.370 (baseline 0.253, coverage 0.48)
-   worst: Monster Hunter Wilds               0.314 (baseline 0.427, coverage 0.74)
-   worst: Call of Duty: Modern Warfare 4     0.275 (baseline 0.236, coverage 1.00)
+   worst: Resident Evil Requiem              0.616 (baseline 1.273, coverage 0.78)
+   worst: Halo Infinite                      0.501 (baseline 0.631, coverage 0.74)
+   worst: Borderlands 4                      0.397 (baseline 0.253, coverage 0.26)
+   worst: Monster Hunter Wilds               0.301 (baseline 0.427, coverage 0.65)
+   worst: Call of Duty: Modern Warfare 4     0.264 (baseline 0.236, coverage 1.00)

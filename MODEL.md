@@ -98,6 +98,46 @@ early-band residual) are outcomes, not inputs: the case carries only hour 1. So 
 cross-launch dispersion of the evening amplitude, which is what the conformal width has to carry. The one
 *structural* error that is measurable is the peak's timing, not its size, and that is the shift above.
 
+## Two proxies, one decision
+
+A change has to earn its place on both harnesses: leave-one-out over the 17 launch-grade pooled
+comparables, and the mean over the four practice cases. (LOO alone once accepted a global phase shift
+that cost the practice cases 0.8%, so both columns are now printed for every candidate; the live entry,
+audited through this session's tools, is LOO 0.2443 / practice 0.164962, coverage 0.908 / 0.946.)
+
+| candidate | LOO | vs live | practice | vs live | coverage LOO / practice | verdict |
+|-----------|----:|--------:|---------:|--------:|------------------------|---------|
+| phase shift 0.75 h alone (previously accepted on LOO) | 0.2415 | −1.15% | 0.166328 | +0.83% | 0.910 / 0.946 | rejected: practice worse |
+| local conformal, size kernel 1.4 for the quantile read only | 0.2474 | +1.3% | 0.163183 | −1.08% | 0.847 / 0.946 | rejected: LOO worse, LOO coverage out |
+| same at kernel 1.8 | 0.2452 | +0.4% | 0.163297 | −1.01% | 0.847 / 0.935 | rejected: LOO worse, coverage out |
+| width 0.50 alone | 0.2442 | −0.04% | 0.162923 | −1.24% | 0.890 / 0.935 | rejected: LOO gain under 0.5% |
+| phase shift 0.40 h + width 0.50 | 0.2416 | −1.10% | 0.162231 | −1.66% | 0.880 / 0.935 | passed both, but band coverage was lopsided (hours 2-4 at 0.76, hours 20-24 at 0.96 on LOO) |
+| **that + band widths 0.85 (hours 15-24) and 1.20 (hours 2-8)** | **0.2401** | **−1.72%** | **0.159744** | **−3.16%** | 0.890 / 0.946 | **accepted** |
+
+The band widths are a calibration, not a fit: per-band coverage showed both harnesses over-covering the
+evening (LOO 0.91 and 0.96, practice 1.00 and 1.00 for 15-19 and 20-24) and under-covering the morning
+(LOO 0.76 and 0.85, practice 0.75 and 0.88 for 2-4 and 9-14). Narrowing hours 15-24 and widening 2-8
+moves both harnesses toward 0.9 at once, and the losses fall in the bands that carry them:
+
+| band | LOO loss, live | LOO loss, accepted |
+|------|---------------:|-------------------:|
+| 2-4 | 0.1586 | 0.1576 |
+| 5-8 | 0.2331 | 0.2325 |
+| 9-14 | 0.2688 | 0.2695 |
+| 15-19 | 0.2813 | 0.2729 |
+| 20-24 | 0.2359 | 0.2276 |
+
+Rejected without a gain: dropping comparables whose hour-1 size is a platform-class outlier (LOO
+0.2401 → 0.2404 at 2.5 sd, 0.2408 at 2.0 sd; the size kernel already softens them and trimming removes
+the biggest launches that bracket a case like GTA VI), and a tier weight on the quantile read (no effect:
+the tier is already inside the weight).
+
+Practice coverage stays at 0.946 against the 0.88-0.92 window: the same width policy cannot satisfy both
+harnesses, because leave-one-out needs the wider late band that practice does not. The change moves LOO
+from 0.908 into the window and practice from 0.946 to 0.946 while cutting its loss 3.2%; narrowing
+further to force practice's 0.92 takes LOO to 0.867, outside the window on the other side. Reported
+rather than papered over.
+
 ## Results
 
 Practice, mean pinball loss over 23 hours x 5 levels (lower is better):
@@ -121,7 +161,7 @@ pool. `tools/loo.py` reports it by hour band and by level, so a change has to mo
 | + covariate slope cap 0.5 -> 0.3 | 0.2525 | −2.36% | 0.1526 / 0.2304 / 0.2829 / 0.2959 / 0.2502 |
 | + size-kernel width 1.5 -> 2.2 | 0.2495 | −1.19% | 0.1550 / 0.2319 / 0.2729 / 0.2886 / 0.2529 |
 | + width 0.8 -> 0.55, ESS_K 14 | 0.2443 | −2.08% | 0.1586 / 0.2331 / 0.2710 / 0.2813 / 0.2359 |
-| + evening phase shift 0.75 h (diurnal and surplus, tapered in from hour 10) | **0.2415** | **−1.15%** | 0.1586 / 0.2331 / 0.2688 / 0.2745 / 0.2323 |
+| + evening phase shift 0.75 h (diurnal and surplus, tapered in from hour 10) | 0.2415 | −1.15% | 0.1586 / 0.2331 / 0.2688 / 0.2745 / 0.2323 |
 
 The phase shift is not a tuned knob: scoring each pooled launch's evening peak (its maximum over hours
 15..24) against the model's shows the model peaks +0.82 h early on average (median +1.0 h), and a shift

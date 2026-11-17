@@ -30,14 +30,14 @@ Mean pinball loss over hours 2..24 and the five levels; lower is better.
 
 | case | launch | house baseline | this entry | gain |
 |------|--------|---------------:|-----------:|-----:|
-| p00 | Marvel's Wolverine | 0.7436 | 0.2235 | 3.33x |
-| p01 | Red Dead Redemption 2 | 0.2868 | 0.1395 | 2.06x |
-| p02 | God of War Ragnarök | 0.2146 | 0.1219 | 1.76x |
-| p03 | Marvel's Spider-Man 2 | 0.3033 | 0.1805 | 1.68x |
-| mean | | 0.387077 | 0.166328 | 2.33x |
+| p00 | Marvel's Wolverine | 0.7436 | 0.2189 | 3.40x |
+| p01 | Red Dead Redemption 2 | 0.2868 | 0.1269 | 2.26x |
+| p02 | God of War Ragnarök | 0.2146 | 0.1140 | 1.88x |
+| p03 | Marvel's Spider-Man 2 | 0.3033 | 0.1792 | 1.69x |
+| mean | | 0.387077 | 0.159744 | 2.42x |
 
-90% coverage 0.946 (baseline 0.783), typical miss 26.3% (baseline 82.7%). Leave-one-comparable-out over
-the 17 launch-grade pooled comparables: 0.2415 against the baseline's 0.3472, coverage 0.910. The kit ships no local grader,
+90% coverage 0.946 (baseline 0.783), typical miss 25.6% (baseline 82.7%). Leave-one-comparable-out over
+the 17 launch-grade pooled comparables: 0.2401 against the baseline's 0.3472, coverage 0.890. The kit ships no local grader,
 so `tools/grade_local.py` implements the arithmetic of RULES.txt "Scoring" and is validated against the
 RULES worked example (0.112545) and against the published baseline (0.387077 / 82.7% / 0.783).
 

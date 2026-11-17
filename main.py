@@ -69,9 +69,11 @@ GROUP_CAP = 0.4        # cap on the console-only group offset per offset, log un
 GROUP_SHRINK = 6.0     # the offset is shrunk by ess / (ess + GROUP_SHRINK)
 ESS_K = 14.0           # shrinkage: lambda = ess / (ess + ESS_K)
 INFLATE = 0.3          # weight of the fitted-mean standard error in the predictive scale
-WIDTH = 0.55           # multiplier on the conformal residual scale
+WIDTH = 0.50           # multiplier on the conformal residual scale
+WIDTH_LATE = 0.85      # extra width multiplier for hours 15-24 (both harnesses over-cover there)
+WIDTH_EARLY = 1.20     # extra width multiplier for hours 2-8 (both under-cover there)
 ROBUST_SCALE = True    # use the weighted MAD instead of the weighted sd for the conditional scale
-PEAK_SHIFT = 0.75      # the case's evening peak lands this many hours later than the pool's
+PEAK_SHIFT = 0.40      # the case's evening peak lands this many hours later than the pool's
 PEAK_FROM = 10         # the shift is tapered in from this offset
 RAMP_SHIFT = True      # also shift the launch surplus, not only the diurnal
 HAT_CAP = 0.8          # cap on the leave-one-out hat value (a weight share that large is degenerate)
@@ -557,13 +559,22 @@ def forecast_case(case):
         frac = x - low
         return profile[low % 24] * (1.0 - frac) + profile[(low + 1) % 24] * frac
 
+    def band_width(o):
+        """Per-band width: the pool's dispersion is wider than a launch-grade case needs late in the
+        day (both harnesses over-cover hours 15-24) and too narrow before the evening"""
+        if o >= 14:
+            return WIDTH_LATE
+        if o <= 7:
+            return WIDTH_EARLY
+        return 1.0
+
     rows = {}
     for o in range(1, 24):
         scale = scales[o]
         standard_error = scale * math.sqrt(1.0 / max(ess, 1e-6) + leverage)
         widen = math.sqrt(1.0 + (INFLATE * standard_error / scale) ** 2)
         base_shift = median_shift[o]
-        spread = [value * WIDTH * widen for value in conformal[o]]
+        spread = [value * WIDTH * band_width(o) * widen for value in conformal[o]]
         quantiles = []
         for i in range(5):
             normal = ZN[i] * BASELINE_SIGMA * math.sqrt(o)  # persistence baseline, o = h - 1
