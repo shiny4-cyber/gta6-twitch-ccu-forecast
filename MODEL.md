@@ -251,6 +251,53 @@ wider conformal smoothing window (radius 2: LOO +0.46%, practice +0.61%). Removi
 altogether is the one thing that improved both — LOO 0.2394 (−0.28%), practice 0.158788 (−0.60%) — and it
 still misses the 0.5% bar on leave-one-out, so it was not taken.
 
+## The median: measured bias, and why nothing is corrected
+
+Sign convention: `e = ln(actual) - ln(q50)`; positive means the model was **too low**.
+
+| band | LOO mean | LOO median | LOO sd | LOO share \|e\|>20% | practice mean | practice median | practice sd | practice share \|e\|>20% |
+|-----:|---------:|-----------:|-------:|------:|---------:|-----------:|-------:|------:|
+| 2-4 | +0.006 | +0.044 | 0.333 | 39% | −0.175 | −0.131 | 0.216 | 50% |
+| 5-8 | +0.137 | +0.085 | 0.456 | 69% | +0.255 | +0.323 | 0.194 | 88% |
+| 9-14 | +0.041 | −0.056 | 0.536 | 74% | −0.132 | −0.071 | 0.233 | 29% |
+| 15-19 | −0.008 | −0.097 | 0.551 | 78% | +0.173 | +0.110 | 0.250 | 40% |
+| 20-24 | +0.030 | −0.047 | 0.473 | 61% | +0.164 | +0.003 | 0.358 | 30% |
+| all | +0.040 | −0.013 | 0.492 | 67% | +0.060 | +0.016 | 0.311 | 45% |
+
+Per-hour LOO means, largest first: hour 7 +0.188, hour 6 +0.167, hour 9 +0.133, hour 8 +0.132,
+hour 2 +0.088, hour 24 +0.081; the most negative are hour 18 −0.095 and hour 17 −0.077. With 17 launches
+per hour the standard error of those means is 0.49/sqrt(17) = 0.12, so every hourly bias sits inside
+1.6 standard errors of zero. By launch size the LOO means are +0.051 (small tercile, v1 20k-54k),
++0.043 (mid, 59k-134k) and +0.027 (large, 139k-875k): no size trend.
+
+Typical miss: LOO 46.0% (mean |e| 0.379), practice 25.6% (mean |e| 0.228) — the practice number is what the
+board prints. The dispersion is the whole story: sd 0.49 and 0.31 with |e| above 20% in 67% and 45% of
+hours.
+
+Four corrections were fitted leave-one-out, applied to all five levels (so the spread is untouched), and
+every one of them makes the pool worse:
+
+| correction fitted out of sample | LOO | vs HEAD | practice | vs HEAD |
+|---------------------------------|----:|--------:|---------:|--------:|
+| per hour, shrink 0.50 | 0.2459 | +2.41% | 0.155712 | −2.52% |
+| per hour, shrink 0.75 | 0.2493 | +3.84% | 0.154296 | −3.41% |
+| per hour, shrink 1.00 | 0.2530 | +5.36% | 0.153481 | −3.92% |
+| by ln hour-1 size, shrink 0.5 / 1.0 | 0.2488 / 0.2595 | +3.6% / +8.1% | — | — |
+| by unlock hour x hour, shrink 0.5 / 1.0 | 0.2533 / 0.2701 | +5.5% / +12.5% | — | — |
+| by platform class and weekend, shrink 0.5 / 1.0 | 0.2457 / 0.2564 | +2.3% / +6.8% | — | — |
+
+The per-hour row is the decisive one: it *does* help the practice cases (they share a coherent hour-5-to-9
+under-prediction, the signature of all four unlocking at 04:00Z), and it still loses 2.4-5.4% on the pool.
+A bias of +0.19 at hour 7 estimated from sixteen launches carries a standard error of 0.12: the correction
+is noise-dominated, and correcting noise costs loss.
+
+The early-fall correction is not available at all: the case supplies hour 1 and the pre-launch history,
+never hours 2-6, so a term keyed on how steeply the first hours fell cannot exist at forecast time.
+
+Conclusion, in numbers rather than adjectives: the pool's median is unbiased to within its own standard
+error (overall +0.040 +- 0.025, every hour inside 1.6 s.e., no size trend), and the misses are dispersion
+(sd 0.49, |e| > 20% in two hours of three). No median correction was made, and `main.py` is unchanged.
+
 ## Results
 
 Practice, mean pinball loss over 23 hours x 5 levels (lower is better):
