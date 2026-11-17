@@ -138,6 +138,39 @@ from 0.908 into the window and practice from 0.946 to 0.946 while cutting its lo
 further to force practice's 0.92 takes LOO to 0.867, outside the window on the other side. Reported
 rather than papered over.
 
+## Per hour, and what was tried on the worst of them
+
+Per-hour loss (mean over the five levels) and 90% coverage on both harnesses at the chosen configuration:
+
+| hour | LOO loss | LOO cov | practice loss | practice cov |
+|-----:|---------:|--------:|--------------:|-------------:|
+| 12 | 0.2613 | 0.88 | 0.2399 | 0.75 |
+| 13 | 0.2853 | 0.82 | 0.1644 | 1.00 |
+| 7 | 0.2869 | 0.88 | 0.1587 | 1.00 |
+| 17 | 0.2875 | 0.88 | 0.1547 | 1.00 |
+| 5 | 0.1305 | 1.00 | 0.2392 | 0.50 |
+| 2 | 0.1270 | 0.76 | 0.0595 | 1.00 |
+
+The four worst by combined loss are hours 12, 13, 7 and 17; hour 5 is the practice cases' unlock wave
+(their 04:00Z console midnight) and the one hour where the two harnesses disagree hardest (LOO covers
+1.00, practice covers 0.50). Nothing below was accepted: each candidate was measured on both, and
+`MODEL.md` keeps the numbers so the trade-off is visible rather than remembered.
+
+| candidate | LOO | vs HEAD | practice | vs HEAD | coverage | verdict |
+|-----------|----:|--------:|---------:|--------:|----------|---------|
+| warp each comparable onto the case's expected evening peak (fade in from hour 8) | 0.2408 | +0.29% | 0.164426 | +2.9% | 0.903 / 0.946 | rejected: worse on both |
+| same warp, no global phase shift | 0.2429 | +1.2% | 0.163216 | +2.2% | 0.895 / 0.946 | rejected |
+| 0.05/0.95 levels at 0.9x width | 0.2402 | +0.04% | 0.157827 | −1.20% | 0.870 / 0.935 | rejected: LOO worse and its coverage under 0.88 |
+| 0.05/0.95 levels at 0.8x width | 0.2419 | +0.75% | 0.156098 | −2.28% | 0.798 / 0.924 | rejected: LOO worse, coverage far out |
+| 0.05/0.95 levels at 1.15x width | 0.2413 | +0.50% | 0.162649 | +1.8% | 0.928 / 0.946 | rejected: worse on both |
+| band widths 0.80 late / 1.35 early / width 0.48 | 0.2397 | −0.17% | 0.158174 | −0.98% | 0.887 / 0.946 | rejected: LOO gain under the 0.5% bar |
+| extra width in the two hours around each case's own unlock | 0.2401 | 0.00% | 0.159624 | −0.08% | 0.890 / 0.946 | rejected: no gain, it only re-spent the early-band width |
+
+The pattern is consistent: every lever that narrows the evening helps the practice cases (which are
+over-covered at 0.946) and either leaves leave-one-out flat or breaks its coverage floor, and every lever
+that widens the morning does the reverse. With one width policy, the two harnesses cannot be moved
+together any further than commit 217a460 already moves them.
+
 ## Results
 
 Practice, mean pinball loss over 23 hours x 5 levels (lower is better):
