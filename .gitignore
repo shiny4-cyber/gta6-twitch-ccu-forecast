@@ -1,0 +1,7 @@
+out/
+outa/
+outb/
+out2/
+analysis/
+__pycache__/
+*.pyc
