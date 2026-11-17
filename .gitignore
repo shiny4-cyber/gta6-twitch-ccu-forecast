@@ -1,2 +1,3 @@
 .makefun/
 analysis/tmp/
+!.makefun/owner.json
